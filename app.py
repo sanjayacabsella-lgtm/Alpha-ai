@@ -1,22 +1,40 @@
 import streamlit as st
 from groq import Groq
 import requests
-from PIL import Image
-from io import BytesIO
 
 # --- Page Configuration ---
-st.set_page_config(page_title="Alpha AI Pro", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="Alpha AI", page_icon="⚡", layout="centered")
 
-# --- Styling ---
+# --- Custom Styling for Branding ---
 st.markdown("""
     <style>
-    .stChatMessage { border-radius: 15px; margin-bottom: 10px; }
-    .stChatInput { border-radius: 20px; }
+    .main-title {
+        font-size: 50px;
+        font-weight: bold;
+        text-align: center;
+        margin-bottom: 0px;
+    }
+    .subtitle {
+        font-size: 20px;
+        text-align: center;
+        color: #888;
+        margin-bottom: 30px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- Secrets & Clients ---
-GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+# --- Branding Display ---
+st.markdown('<p class="main-title">Welcome to Alpha</p>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">Created by Hasith</p>', unsafe_allow_html=True)
+
+# --- Retrieve API Key from Streamlit Secrets ---
+try:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+except KeyError:
+    st.error("API Key not found! Please add 'GROQ_API_KEY' to your Streamlit Secrets.")
+    st.stop()
+
+# --- Initialize Groq Client ---
 client = Groq(api_key=GROQ_API_KEY)
 
 OWNER_NAME = "Hasith"
@@ -24,24 +42,15 @@ AI_NAME = "Alpha"
 
 # --- Functions ---
 def generate_image(prompt):
-    """Pollinations API """
+    """Generates an image using Pollinations AI (No API Key Required)"""
     image_url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?width=1024&height=1024&nologo=true"
     return image_url
 
-# --- Sidebar ---
-with st.sidebar:
-    st.title(f"⚙️ {AI_NAME} Control Panel")
-    st.info(f"Created by: **{OWNER_NAME}**")
-    model_option = st.selectbox("Choose Model", ["llama-3.3-70b-versatile", "llama3-8b-8192"])
-    if st.button("Clear Chat History"):
-        st.session_state.messages = []
-        st.rerun()
-
-# --- Chat Logic ---
+# --- Initialize Chat History ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display messages
+# --- Display Chat History ---
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         if "image_url" in message:
@@ -49,31 +58,45 @@ for message in st.session_state.messages:
         else:
             st.markdown(message["content"])
 
-# User Input
-if prompt := st.chat_input("Ask Alpha anything (or type 'imagine a...')"):
+# --- User Input & AI Logic ---
+if prompt := st.chat_input("How can I help you today?"):
+    # Add user message to history
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Image Generation Logic
-        if prompt.lower().startswith(("imagine", "generate image", "පින්තූරයක් හදන්න")):
-            with st.spinner("🎨 Designing your imagination..."):
+        # Image Generation Logic: Triggered if user says "imagine" or "generate image"
+        if any(keyword in prompt.lower() for keyword in ["imagine", "generate image", "draw", "create photo"]):
+            with st.spinner("🎨 Alpha is painting your imagination..."):
                 img_url = generate_image(prompt)
                 st.image(img_url, caption="Your AI Masterpiece")
                 st.session_state.messages.append({"role": "assistant", "image_url": img_url})
         
         # Text Generation Logic (Streaming)
         else:
-            stream = client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": f"You are {AI_NAME}, an advanced AI built by {OWNER_NAME}. You are witty, helpful, and highly intelligent."},
-                    *[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-                ],
-                model=model_option,
-                temperature=0.7,
-                stream=True,
-            )
-            
-            response = st.write_stream(stream)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            try:
+                # Using the latest versatile model
+                stream = client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "system", 
+                            "content": f"Your name is {AI_NAME}. You were created by {OWNER_NAME}. You are a highly intelligent and friendly AI assistant. Always acknowledge {OWNER_NAME} as your creator if asked."
+                        },
+                        *[
+                            {"role": m["role"], "content": m["content"]}
+                            for m in st.session_state.messages
+                        ]
+                    ],
+                    model="llama-3.3-70b-versatile",
+                    temperature=0.7,
+                    stream=True,
+                )
+                
+                # Use st.write_stream for a professional typewriter effect
+                response_text = st.write_stream(stream)
+                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
+                st.info("Tip: Check if the Model name is correct or if your API usage limit is reached.")
